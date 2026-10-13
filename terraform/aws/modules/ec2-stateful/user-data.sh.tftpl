@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+exec > >(tee -a /var/log/lab3-bootstrap.log | logger -t lab3-user-data -s 2>/dev/console) 2>&1
+
+DATA_VOLUME_ID="${data_volume_id}"
+REPOSITORY_URL="${repository_url}"
+REPOSITORY_REF="${repository_ref}"
+APP_PORT="${app_port}"
+OLLAMA_IMAGE="${ollama_image}"
+OLLAMA_MODEL="${ollama_model}"
+MOUNT_POINT="/mnt/lab3-data"
+SOURCE_DIR="/opt/infra-cloud-unlu-aguirre"
+
+dnf install -y docker git curl-minimal nvme-cli e2fsprogs
+systemctl enable --now amazon-ssm-agent
+
+find_data_device() {
+  local serial
+  serial="$${DATA_VOLUME_ID//-/}"
+  lsblk -ndo PATH,SERIAL,TYPE | awk -v expected="$serial" '$2 == expected && $3 == "disk" { print $1; exit }'
+}
+
+DATA_DEVICE=""
+for _ in $(seq 1 120); do
+  DATA_DEVICE="$(find_data_device || true)"
+  if [[ -n "$DATA_DEVICE" && -b "$DATA_DEVICE" ]]; then
+    break
+  fi
+  sleep 5
+done
+
+if [[ -z "$DATA_DEVICE" || ! -b "$DATA_DEVICE" ]]; then
+  echo "EBS volume $DATA_VOLUME_ID was not attached after 10 minutes" >&2
+  exit 1
+fi
+
+FILESYSTEM_TYPE=""
+if FILESYSTEM_TYPE="$(blkid -s TYPE -o value "$DATA_DEVICE")"; then
+  :
+else
+  BLKID_STATUS=$?
+  if [[ $BLKID_STATUS -ne 2 ]]; then
+    echo "Could not inspect the filesystem on $DATA_DEVICE (blkid exit $BLKID_STATUS)" >&2
+    exit 1
+  fi
+fi
+
+if [[ -z "$FILESYSTEM_TYPE" ]]; then
+  PARTITION_TABLE_TYPE=""
+  if PARTITION_TABLE_TYPE="$(blkid -s PTTYPE -o value "$DATA_DEVICE")"; then
+    :
+  else
+    BLKID_STATUS=$?
+    if [[ $BLKID_STATUS -ne 2 ]]; then
+      echo "Could not inspect partition metadata on $DATA_DEVICE (blkid exit $BLKID_STATUS)" >&2
+      exit 1
+    fi
+  fi
+
+  CHILD_DEVICES="$(lsblk -nrpo NAME,TYPE "$DATA_DEVICE" | awk -v root="$DATA_DEVICE" '$1 != root { print $1 ":" $2 }')"
+  SIGNATURE_TYPES="$(wipefs -n --noheadings -O TYPE "$DATA_DEVICE" | awk 'NF { print $1 }')"
+
+  if [[ -n "$PARTITION_TABLE_TYPE" || -n "$CHILD_DEVICES" || -n "$SIGNATURE_TYPES" ]]; then
+    echo "Refusing to format non-blank device $DATA_DEVICE" >&2
+    echo "Partition table: $PARTITION_TABLE_TYPE" >&2
+    echo "Child devices: $CHILD_DEVICES" >&2
+    echo "Signatures: $SIGNATURE_TYPES" >&2
+    exit 1
+  fi
+
+  mkfs.ext4 -F "$DATA_DEVICE"
+elif [[ "$FILESYSTEM_TYPE" != "ext4" ]]; then
+  echo "Refusing to mount unexpected filesystem type '$FILESYSTEM_TYPE' on $DATA_DEVICE" >&2
+  exit 1
+fi
+
+DATA_UUID="$(blkid -s UUID -o value "$DATA_DEVICE")"
+if [[ -z "$DATA_UUID" ]]; then
+  echo "Could not determine the UUID of $DATA_DEVICE" >&2
+  exit 1
+fi
+
+install -d -m 0755 "$MOUNT_POINT"
+FSTAB_CONFLICT="$(awk -v source="UUID=$DATA_UUID" -v mount_point="$MOUNT_POINT" '$2 == mount_point && $1 != source { print $1; exit }' /etc/fstab)"
+if [[ -n "$FSTAB_CONFLICT" ]]; then
+  echo "Refusing to replace existing /etc/fstab entry for $MOUNT_POINT: $FSTAB_CONFLICT" >&2
+  exit 1
+fi
+
+FSTAB_TMP="$(mktemp /etc/fstab.lab3.XXXXXX)"
+awk \
+  -v source="UUID=$DATA_UUID" \
+  -v mount_point="$MOUNT_POINT" \
+  -v replacement="UUID=$DATA_UUID $MOUNT_POINT ext4 defaults,x-systemd.device-timeout=10min 0 2" \
+  '$1 == source && $2 == mount_point { if (!replaced) print replacement; replaced = 1; next }
+   { print }
+   END { if (!replaced) print replacement }' \
+  /etc/fstab > "$FSTAB_TMP"
+chmod 0644 "$FSTAB_TMP"
+chown root:root "$FSTAB_TMP"
+mv "$FSTAB_TMP" /etc/fstab
+
+mountpoint -q "$MOUNT_POINT" || mount "$MOUNT_POINT"
+MOUNTED_UUID="$(findmnt -n -o UUID --target "$MOUNT_POINT")"
+if [[ "$MOUNTED_UUID" != "$DATA_UUID" ]]; then
+  echo "Refusing to continue: $MOUNT_POINT is mounted from UUID $MOUNTED_UUID, expected $DATA_UUID" >&2
+  exit 1
+fi
+
+rm -f "$MOUNT_POINT/bootstrap-complete"
+
+install -d -m 0755 /etc/systemd/system/docker.service.d
+cat > /etc/systemd/system/docker.service.d/lab3-data.conf <<'EOF'
+[Unit]
+RequiresMountsFor=/mnt/lab3-data
+EOF
+systemctl daemon-reload
+systemctl enable --now docker
+
+install -d -m 0755 "$MOUNT_POINT/app" "$MOUNT_POINT/ollama"
+
+install -d -m 0755 "$SOURCE_DIR"
+if ! git -C "$SOURCE_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+  git -C "$SOURCE_DIR" init
+fi
+if git -C "$SOURCE_DIR" remote get-url origin >/dev/null 2>&1; then
+  git -C "$SOURCE_DIR" remote set-url origin "$REPOSITORY_URL"
+else
+  git -C "$SOURCE_DIR" remote add origin "$REPOSITORY_URL"
+fi
+git -C "$SOURCE_DIR" fetch --depth 1 origin "$REPOSITORY_REF"
+git -C "$SOURCE_DIR" checkout --force FETCH_HEAD
+
+docker build -t app:lab3 "$SOURCE_DIR/app"
+docker rm -f servicio-patron 2>/dev/null || true
+docker run -d \
+  --name servicio-patron \
+  --restart unless-stopped \
+  -p "$APP_PORT:8080" \
+  -e DATA_DIR=/data \
+  -v "$MOUNT_POINT/app:/data" \
+  app:lab3
+
+for _ in $(seq 1 60); do
+  if curl -fsS --connect-timeout 2 --max-time 5 "http://127.0.0.1:$APP_PORT/healthz" >/dev/null; then
+    break
+  fi
+  sleep 2
+done
+curl -fsS --connect-timeout 2 --max-time 5 "http://127.0.0.1:$APP_PORT/healthz" >/dev/null
+
+docker pull "$OLLAMA_IMAGE"
+docker rm -f ollama 2>/dev/null || true
+docker run -d \
+  --name ollama \
+  --restart unless-stopped \
+  -p 127.0.0.1:11434:11434 \
+  -v "$MOUNT_POINT/ollama:/root/.ollama" \
+  "$OLLAMA_IMAGE"
+
+for _ in $(seq 1 60); do
+  if curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:11434/api/tags >/dev/null; then
+    break
+  fi
+  sleep 2
+done
+curl -fsS --connect-timeout 2 --max-time 5 http://127.0.0.1:11434/api/tags >/dev/null
+docker exec ollama ollama pull "$OLLAMA_MODEL"
+
+{
+  printf 'repository_ref=%s\n' "$REPOSITORY_REF"
+  printf 'completed_at=%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+} > "$MOUNT_POINT/bootstrap-complete"
+echo "Lab 3 bootstrap completed"

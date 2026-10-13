@@ -98,6 +98,18 @@ numerados con la salida esperada, un recuadro "En la nube", limpieza y una
 tabla de errores frecuentes. Algunas clases tienen además una guía
 específica, enlazada desde tu aula: seguí la que te indica Moodle.
 
+## Adaptación personal a AWS
+
+Los ejemplos originales del curso para GCP se mantienen intactos. Como
+adaptación personal, el [Lab 3 en AWS](docs/lab-03-aws.md) ejecuta el servicio
+patrón en una instancia EC2, guarda sus datos en un volumen EBS independiente,
+usa Session Manager en lugar de exponer SSH y suma Ollama en Docker como carga
+de inferencia. Todo el Terraform de esta variante vive bajo `terraform/aws/`.
+
+El laboratorio reutiliza la VPC y una subred predeterminadas de la cuenta, pero
+no crea una VPC nueva ni modifica el security group predeterminado: crea un
+security group dedicado y limita el puerto del servicio a una única IPv4 `/32`.
+
 ## ¿Qué hay acá adentro?
 
 ```

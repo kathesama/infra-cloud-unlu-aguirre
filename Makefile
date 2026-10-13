@@ -21,14 +21,14 @@ K3D_ARGS      ?=
 # (for example model/ or pow/) does not break these targets.
 CHARTS        := $(notdir $(wildcard helm/charts/*))
 IMAGES        := $(foreach d,app model pow,$(if $(wildcard $(d)/Dockerfile),$(d))) anvil-exporter
-TF_ROOTS      := envs/dev envs/prod modules/network modules/vm modules/artifact-registry modules/gke
+TF_ROOTS      := envs/dev envs/prod modules/network modules/vm modules/artifact-registry modules/gke aws/modules/ec2-stateful aws/envs/lab3
 PYTEST        := uv run --python $(PYTHON) --with-requirements requirements.txt --with pytest --with httpx pytest -q
 
 .DEFAULT_GOAL := help
 .PHONY: help doctor test test-app test-model test-pow test-exporter test-contracts \
         build build-app build-model build-pow build-exporter \
         compose-up compose-down compose-reset compose-anvil-up compose-anvil-down compose-anvil-reset \
-        tf-fmt tf-validate helm-lint helm-template k3d-up k3d-images k3d-down loadtest clean
+        tf-fmt tf-validate tf-test-aws helm-lint helm-template k3d-up k3d-images k3d-down loadtest clean
 
 help: ## list the targets
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-20s %s\n", $$1, $$2}'
@@ -103,6 +103,9 @@ tf-validate: ## init -backend=false + validate on every root (offline)
 	  echo "== $$r"; \
 	  (cd terraform/$$r && $(TF) init -backend=false -input=false >/dev/null && $(TF) validate); \
 	done
+
+tf-test-aws: ## terraform test for AWS Lab 3 (mock provider, no cloud resources)
+	cd terraform/aws/envs/lab3 && $(TF) init -backend=false -input=false >/dev/null && $(TF) test
 
 # --- helm / kubernetes ---------------------------------------------------------
 helm-lint: ## helm lint of every chart, GKE values and k3s values

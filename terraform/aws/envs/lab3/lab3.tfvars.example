@@ -1,0 +1,7 @@
+# 203.0.113.10 is an RFC 5737 documentation-only address. A live plan must derive the actual public IPv4 address and use its /32 CIDR.
+aws_region          = "us-east-1"
+availability_zone   = "us-east-1a"
+allowed_cidr        = "203.0.113.10/32"
+instance_type       = "c7i-flex.large"
+data_volume_size_gb = 10
+repository_ref      = "main"
