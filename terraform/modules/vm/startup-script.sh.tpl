@@ -44,8 +44,19 @@ fi
 
 %{ if endswith(registry_host, "-docker.pkg.dev") ~}
 # Private Artifact Registry image: docker needs credentials for it. This uses
-# the VM's service account (it needs roles/artifactregistry.reader).
-gcloud auth configure-docker "${registry_host}" --quiet
+# the VM's service account (it needs roles/artifactregistry.reader). The
+# stock Debian image does not include gcloud, so request a short-lived OAuth
+# token directly from the Compute Engine metadata server instead.
+ACCESS_TOKEN="$(
+  curl -fsS \
+    -H "Metadata-Flavor: Google" \
+    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+    | sed -E 's/.*"access_token"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/'
+)"
+test -n "$ACCESS_TOKEN"
+printf '%s' "$ACCESS_TOKEN" \
+  | docker login -u oauth2accesstoken --password-stdin "https://${registry_host}"
+unset ACCESS_TOKEN
 %{ endif ~}
 
 # Stop cleanly first (SIGTERM, up to 30 s) so a stateful process such as

@@ -1,0 +1,9 @@
+project_id            = "my-project-id"
+region                = "us-central1"
+zone                  = "us-central1-a"
+servicio_patron_image = "us-central1-docker.pkg.dev/my-project-id/infra-cloud-template/model:v1"
+app_port              = 8081
+
+enable_artifact_registry = false
+enable_vm                = true
+spot                     = true
