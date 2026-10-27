@@ -127,6 +127,23 @@ propósito (lo decide `scripts/compute-tags.sh`). No hay `:latest`.
 Si querés poner una versión a una imagen ya publicada sin rebuild:
 `gcloud artifacts docker tags add "$AR/app:<sha>" "$AR/app:v0.1.1"`.
 
+## Versionado de los pesos de Iris
+
+Los pesos del servicio `model` tienen una versión propia, independiente del
+tag de la imagen. En este laboratorio viven dentro de la imagen, bajo
+`/app/weights`, con el nombre `model-iris-logreg-v1.joblib`. El Dockerfile
+recibe `MODEL_VERSION` como argumento de build (por defecto,
+`iris-logreg-v1`) y deja `MODEL_PATH` apuntando al archivo correspondiente.
+Cuando cambien el dataset, el algoritmo o los hiperparámetros, se incrementa
+`MODEL_VERSION` sin reutilizar el nombre anterior; la imagen sigue llevando
+sus tags inmutables por SHA y, para releases, el tag semántico `vX.Y.Z`.
+
+Ejemplo para una nueva versión de pesos:
+
+```bash
+docker build --build-arg MODEL_VERSION=iris-logreg-v2 -t model:prueba ./model
+```
+
 ## Agregar un servicio propio al pipeline
 
 Si sumás una carpeta nueva (por ejemplo `mi-servicio/` con su `Dockerfile`,

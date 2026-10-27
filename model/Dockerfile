@@ -7,10 +7,16 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY train.py serve.py ./
-RUN python train.py
+
+# The model artifact has its own version, independent from the image tag.
+# Override with --build-arg MODEL_VERSION=<version> when the weights change.
+ARG MODEL_VERSION=iris-logreg-v1
+ENV MODEL_VERSION=${MODEL_VERSION} \
+    MODEL_PATH=/app/weights/model-${MODEL_VERSION}.joblib \
+    PORT=8081
+RUN mkdir -p /app/weights && python train.py
 
 EXPOSE 8081
-ENV MODEL_PATH=/app/model.joblib PORT=8081
 
 # `docker ps` shows (healthy) once /healthz answers. Kubernetes ignores this
 # and uses the chart's probes instead.

@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,10 +13,14 @@ MODEL_DIR = Path(__file__).resolve().parents[1]
 def trained_model(tmp_path_factory, monkeypatch_session=None):
     # Train into a throwaway dir so we never touch a committed model file.
     tmp_dir = tmp_path_factory.mktemp("model")
-    model_path = tmp_dir / "model.joblib"
+    model_path = tmp_dir / "model-iris-logreg-v1.joblib"
+    env = os.environ.copy()
+    env["MODEL_PATH"] = str(model_path)
+    env["MODEL_VERSION"] = "iris-logreg-v1"
     subprocess.run(
         [sys.executable, str(MODEL_DIR / "train.py")],
         cwd=tmp_dir,
+        env=env,
         check=True,
     )
     return model_path
