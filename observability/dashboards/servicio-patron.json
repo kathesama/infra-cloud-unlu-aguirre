@@ -10,29 +10,76 @@
       "id": 1,
       "title": "Requests per second",
       "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "targets": [
-        { "expr": "sum(rate(servicio_patron_hits_total[5m]))", "legendFormat": "hits/s" }
+        { "expr": "sum(rate(servicio_patron_hits_total[5m]))", "legendFormat": "hits/s", "refId": "A" }
       ]
     },
     {
       "id": 2,
       "title": "Items created per second",
       "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "targets": [
-        { "expr": "sum(rate(servicio_patron_items_created_total[5m]))", "legendFormat": "items/s" }
+        { "expr": "sum(rate(servicio_patron_items_created_total[5m]))", "legendFormat": "items/s", "refId": "A" }
       ]
     },
     {
       "id": 3,
       "title": "Request latency p95 (by path)",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "targets": [
         {
           "expr": "histogram_quantile(0.95, sum(rate(servicio_patron_request_seconds_bucket[5m])) by (le, path))",
-          "legendFormat": "{{path}}"
+          "legendFormat": "{{path}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Saturation - CPU used vs requested",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(container_cpu_usage_seconds_total{namespace=\"ia-clase6\",pod=~\"servicio-patron.*\",container!=\"\"}[5m])) / sum(kube_pod_container_resource_requests{namespace=\"ia-clase6\",pod=~\"servicio-patron.*\",resource=\"cpu\"})",
+          "legendFormat": "CPU saturation %",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Forced 404 logs",
+      "type": "logs",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "{app=\"servicio-patron\"} |= \"404\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "404 error peak (1 minute)",
+      "type": "timeseries",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({app=\"servicio-patron\"} |= \"404\" [1m]))",
+          "legendFormat": "404/min",
+          "queryType": "range",
+          "refId": "A"
         }
       ]
     }

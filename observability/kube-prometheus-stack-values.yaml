@@ -30,13 +30,30 @@ grafana:
   #   kubectl -n observability get secret kube-prom-grafana \
   #     -o jsonpath='{.data.admin-password}' | base64 -d
   adminPassword: ""
+  # Cloud Shell Web Preview is a reverse proxy with a different public origin.
+  # Trust only this lab preview origin so Grafana's CSRF protection accepts
+  # dashboard queries without being disabled globally.
+  grafana.ini:
+    security:
+      csrf_trusted_origins: "https://3000-cs-1fd8766c-b9d0-454f-8dde-7d0163869e47.cs-us-east1-pkhd.cloudshell.dev"
+      csrf_additional_headers: "X-Forwarded-Host"
+    plugins:
+      # The lab cluster has no reliable egress to grafana.com. The plugins
+      # needed by these dashboards are already bundled with the image.
+      preinstall: ""
+      preinstall_auto_update: false
+  # Grafana 13 scans its bundled plugins on first boot. On a small GKE node
+  # that can take more than the chart's default liveness window, so allow the
+  # process to finish instead of restarting it halfway through startup.
+  livenessProbe:
+    initialDelaySeconds: 900
   resources:
     requests:
-      cpu: 50m
+      cpu: 250m
       memory: 128Mi
     limits:
-      cpu: 200m
-      memory: 256Mi
+      cpu: "1"
+      memory: 512Mi
   sidecar:
     # Loads observability/dashboards/*.json from ConfigMaps labeled
     # grafana_dashboard=1, in any namespace.

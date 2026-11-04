@@ -70,6 +70,7 @@ def test_predict_returns_class_and_confidence(client):
     body = r.json()
     assert body["class"] in {"setosa", "versicolor", "virginica"}
     assert 0.0 <= body["confidence"] <= 1.0
+    assert body["model_version"] == "iris-logreg-v1.1"
 
 
 def test_predict_validates_feature_count(client):
@@ -81,3 +82,5 @@ def test_metrics(client):
     client.post("/predict", json={"features": [5.1, 3.5, 1.4, 0.2]})
     r = client.get("/metrics")
     assert b"model_predictions_total" in r.content
+    assert b"predict_confidence_score_count" in r.content
+    assert b'predict_confidence_score_bucket{le="0.95"}' in r.content

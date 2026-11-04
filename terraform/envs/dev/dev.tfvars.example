@@ -13,6 +13,8 @@ zone       = "us-central1-a"
 
 # Class 5 onward (costs money while it exists):
 # enable_gke = true
+# Class 6 observability needs more memory than the e2-small default:
+# gke_machine_type = "e2-standard-2"
 
 # Who can reach app_port on the VM (default: anyone). Narrow it for an RPC:
 # app_source_ranges = ["<your-ip>/32"]

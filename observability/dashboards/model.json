@@ -14,6 +14,7 @@
       "id": 1,
       "title": "Predictions per second",
       "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -23,7 +24,8 @@
       "targets": [
         {
           "expr": "sum(rate(model_predictions_total[5m]))",
-          "legendFormat": "predictions/s"
+          "legendFormat": "predictions/s",
+          "refId": "A"
         }
       ]
     },
@@ -31,6 +33,7 @@
       "id": 2,
       "title": "Prediction latency p95",
       "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -40,7 +43,8 @@
       "targets": [
         {
           "expr": "histogram_quantile(0.95, sum(rate(model_predict_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p95"
+          "legendFormat": "p95",
+          "refId": "A"
         }
       ]
     },
@@ -48,6 +52,7 @@
       "id": 3,
       "title": "Replicas (HPA)",
       "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -57,13 +62,48 @@
       "targets": [
         {
           "expr": "kube_horizontalpodautoscaler_status_current_replicas{horizontalpodautoscaler=\"model\"}",
-          "legendFormat": "current"
+          "legendFormat": "current",
+          "refId": "A"
         },
         {
           "expr": "kube_horizontalpodautoscaler_status_desired_replicas{horizontalpodautoscaler=\"model\"}",
-          "legendFormat": "desired"
+          "legendFormat": "desired",
+          "refId": "B"
         }
       ]
+    },
+    {
+      "id": 4,
+      "title": "Prediction confidence p50",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(predict_confidence_score_bucket[5m])) by (le))",
+          "legendFormat": "p50 confidence",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 0.8 }
+            ]
+          }
+        },
+        "overrides": []
+      }
     }
   ]
 }
