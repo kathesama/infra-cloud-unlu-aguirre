@@ -20,3 +20,9 @@ backend.hcl
 .terraform.lock.hcl
 # Class 1 bind-mount data dir (docker run -v "$PWD/datos:/data").
 datos/
+# >>> alisd managed >>>
+.alisd/*
+!.alisd/project.json
+.agents/skills/
+.claude/skills/
+# <<< alisd managed <<<
